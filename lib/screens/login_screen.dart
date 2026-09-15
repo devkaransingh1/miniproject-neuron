@@ -258,14 +258,15 @@ class _NeuronAuthPageState extends State<NeuronAuthPage> {
                         fillColor: fieldFillColor,
                         borderColor: borderColor,
                       ),
-                      const SizedBox(height: 12),
-
-                      // Checkboxes / Options
+                      const SizedBox(height: 12),                      // Checkboxes / Options
                       if (!isSignUp)
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        Wrap(
+                          alignment: WrapAlignment.spaceBetween,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          runSpacing: 8,
                           children: [
                             Row(
+                              mainAxisSize: MainAxisSize.min,
                               children: [
                                 SizedBox(
                                   width: 22,
@@ -419,8 +420,9 @@ class _NeuronAuthPageState extends State<NeuronAuthPage> {
                       const SizedBox(height: 22),
 
                       // Bottom toggle between Login and Sign Up
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           Text(
                             isSignUp
