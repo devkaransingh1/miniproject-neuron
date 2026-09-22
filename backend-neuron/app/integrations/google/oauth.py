@@ -25,12 +25,12 @@ def create_google_flow():
             }
         },
         scopes=GOOGLE_SCOPES,
+        autogenerate_code_verifier=False,
     )
 
     flow.redirect_uri = GOOGLE_REDIRECT_URI
 
     return flow
-
 
 def get_google_authorization_url():
     flow = create_google_flow()
