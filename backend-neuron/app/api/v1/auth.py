@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, HTTPException
 import requests
 from fastapi.responses import RedirectResponse
 from fastapi import Depends
@@ -12,6 +12,17 @@ from app.integrations.google.oauth import (
 )
 
 router = APIRouter()
+
+
+def get_current_user(request:Request,db:Session=Depends(get_db)):
+    user_id = request.session.get('user_id')
+    if not user_id:
+        raise HTTPException(status_code=401,detail="no user found, unauthorized")
+    
+    user = db.query(User).filter(User.id==user_id).first()
+    if not user:
+        raise HTTPException(status_code=401,detail="user not found")
+    return user
 
 
 @router.get("/google/login")
@@ -39,6 +50,12 @@ def google_callback(request: Request,db: Session = Depends(get_db)):
     
     user_info = response.json()
     
+    user = db.query(User).filter(User.google_id==user_info['id']).first()
+    
+    if user:
+        request.session['user_id']=user.id
+        return RedirectResponse(url='/api/v1/auth/me')
+    
     user = User(
         google_id=user_info["id"],
         name=user_info["name"],
@@ -46,14 +63,30 @@ def google_callback(request: Request,db: Session = Depends(get_db)):
         picture_url=user_info.get("picture")
     )
     
+    request.session['user_id']=user.id
     
     db.add(user)
     db.commit()
     db.refresh(user)
 
+    return RedirectResponse(url='/api/v1/auth/me')
+    
+    
+@router.get('/me')
+def me(user=Depends(get_current_user)):
     return {
-        "message": "User saved successfully",
-        "name": user.name,
-        "email": user.email,
-        "picture_url": user.picture_url
+        "message":"profile accessed",
+        "name":user.name,
+        "email":user.email
     }
+    
+@router.post('/logout')
+def logout(request:Request):
+    request.session.clear()
+    return {
+        "message":"user logged out successfully"
+    }
+    
+    
+    
+    
