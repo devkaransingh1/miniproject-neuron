@@ -5,10 +5,13 @@ from fastapi import Depends
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.user import User
+from app.integrations.google.oauth import create_gmail_service
+
 
 from app.integrations.google.oauth import (
     get_google_authorization_url,
     create_google_flow,
+    create_gmail_flow,
 )
 
 router = APIRouter()
@@ -27,12 +30,18 @@ def get_current_user(request:Request,db:Session=Depends(get_db)):
 
 @router.get("/google/login")
 def google_login(request: Request):
+
+    user_id = request.session.get("user_id")
+
+    if user_id:
+        return RedirectResponse(url="/api/v1/auth/me")
+
     authorization_url, state = get_google_authorization_url()
+    
 
     request.session["oauth_state"] = state
 
     return RedirectResponse(url=authorization_url)
-
 
 @router.get("/google/callback")
 def google_callback(request: Request,db: Session = Depends(get_db)):
@@ -41,6 +50,7 @@ def google_callback(request: Request,db: Session = Depends(get_db)):
     flow.fetch_token(
         code=request.query_params.get("code")
     )
+    
 
     credentials = flow.credentials
     response = requests.get(
@@ -63,11 +73,12 @@ def google_callback(request: Request,db: Session = Depends(get_db)):
         picture_url=user_info.get("picture")
     )
     
-    request.session['user_id']=user.id
     
     db.add(user)
     db.commit()
     db.refresh(user)
+    
+    request.session['user_id']=user.id
 
     return RedirectResponse(url='/api/v1/auth/me')
     
@@ -80,13 +91,19 @@ def me(user=Depends(get_current_user)):
         "email":user.email
     }
     
-@router.post('/logout')
+@router.get('/logout')
 def logout(request:Request):
     request.session.clear()
     return {
         "message":"user logged out successfully"
     }
+
+    
+
     
     
+
+    
+
     
     
