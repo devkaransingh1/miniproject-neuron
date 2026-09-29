@@ -318,3 +318,66 @@ def gmail_message(
     email["body"] = extract_email_body(data["payload"])
 
     return email
+
+def search_gmail_messages(user, query, max_results=10):
+    service = create_gmail_service(user)
+
+    results = service.users().messages().list(
+        userId="me",
+        q=query,
+        maxResults=max_results
+    ).execute()
+
+    messages = results.get("messages", [])
+
+    emails = []
+
+    for message in messages:
+        data = service.users().messages().get(
+            userId="me",
+            id=message["id"],
+            format="metadata",
+            metadataHeaders=["From", "To", "Subject", "Date"]
+        ).execute()
+
+        headers = data.get("payload", {}).get("headers", [])
+
+        email = {
+            "id": message["id"],
+            "from": "",
+            "to": "",
+            "subject": "",
+            "date": "",
+            "body": data.get("snippet", "")
+        }
+
+        for header in headers:
+            name = header["name"].lower()
+            value = header["value"]
+
+            if name == "from":
+                email["from"] = value
+            elif name == "to":
+                email["to"] = value
+            elif name == "subject":
+                email["subject"] = value
+            elif name == "date":
+                email["date"] = value
+
+        emails.append(email)
+
+    return emails
+
+
+
+@router.get("/gmail/search")
+def search_gmail(
+    q: str,
+    user=Depends(get_current_user)
+):
+    emails = search_gmail_messages(user, q)
+
+    return {
+        "count": len(emails),
+        "emails": emails
+    }
