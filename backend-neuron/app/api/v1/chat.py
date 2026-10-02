@@ -3,14 +3,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+import json
+
 from app.api.v1.auth import get_current_user
 from app.db.session import get_db
 from app.models.conversation import Conversation
 from app.models.message import Message
 from app.agents.neuron_agent import create_neuron_agent
-
-import json
-import ast
 
 
 router = APIRouter()
@@ -19,6 +18,55 @@ router = APIRouter()
 class ChatRequest(BaseModel):
     message: str
     conversation_id: int | None = None
+
+
+def parse_tool_result(content):
+    """
+    Convert a tool's JSON string response into a Python object.
+    """
+
+    if not content:
+        return None
+
+    if isinstance(content, (dict, list)):
+        return content
+
+    try:
+        return json.loads(content)
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+
+def extract_assistant_text(content) -> str:
+    """
+    LangChain can return assistant content as either a string
+    or a structured list of content blocks.
+    """
+
+    if isinstance(content, str):
+        return content
+
+    if isinstance(content, list):
+
+        text_parts = []
+
+        for block in content:
+
+            if isinstance(block, str):
+                text_parts.append(block)
+
+            elif isinstance(block, dict):
+
+                if block.get("type") == "text":
+                    text_parts.append(
+                        block.get("text", "")
+                    )
+
+        return "\n".join(
+            part for part in text_parts if part
+        )
+
+    return str(content)
 
 
 @router.post("/chat")
@@ -74,9 +122,31 @@ def chat(
 
     for msg in previous_messages:
 
+        content = msg.content
+
+        # Previous assistant responses are stored as JSON.
+        # Only send the human-readable content back to the agent.
+        if msg.role == "assistant":
+
+            try:
+                stored_response = json.loads(content)
+
+                if isinstance(stored_response, dict):
+                    content = stored_response.get(
+                        "content",
+                        content
+                    )
+
+            except (json.JSONDecodeError, TypeError):
+                pass
+
         agent_messages.append({
-            "role": "assistant" if msg.role == "assistant" else "user",
-            "content": msg.content
+            "role": (
+                "assistant"
+                if msg.role == "assistant"
+                else "user"
+            ),
+            "content": content
         })
 
     agent_messages.append({
@@ -98,53 +168,84 @@ def chat(
         "messages": agent_messages
     })
 
+    messages = agent_response.get(
+        "messages",
+        []
+    )
+
+    if not messages:
+        raise HTTPException(
+            status_code=500,
+            detail="Neuron agent returned no response"
+        )
+
     # -----------------------------------------
     # FINAL ASSISTANT RESPONSE
     # -----------------------------------------
 
-    response_text = agent_response["messages"][-1].content
+    final_message = messages[-1]
+
+    response_text = extract_assistant_text(
+        getattr(
+            final_message,
+            "content",
+            ""
+        )
+    )
 
     # -----------------------------------------
-    # CHECK IF EMAIL KNOWLEDGE TOOL WAS USED
+    # CHECK TOOL RESULTS
     # -----------------------------------------
 
-    email_results = None
+    email_results = []
 
-    for msg in agent_response["messages"]:
+    for msg in messages:
 
-        if (
-            getattr(msg, "type", None) == "tool"
-            and getattr(msg, "name", None) == "email_knowledge"
-        ):
-            email_results = msg.content
+        if getattr(msg, "type", None) != "tool":
+            continue
+
+        tool_name = getattr(
+            msg,
+            "name",
+            None
+        )
+
+        if tool_name not in {
+            "gmail_search",
+            "email_knowledge"
+        }:
+            continue
+
+        parsed_result = parse_tool_result(
+            getattr(msg, "content", None)
+        )
+
+        if not isinstance(parsed_result, dict):
+            continue
+
+        tool_emails = parsed_result.get(
+            "emails",
+            []
+        )
+
+        if isinstance(tool_emails, list):
+            email_results.extend(
+                tool_emails
+            )
 
     # -----------------------------------------
     # BUILD FRONTEND RESPONSE
     # -----------------------------------------
 
-    if email_results is not None:
+    if email_results:
 
-        try:
-
-            emails = ast.literal_eval(email_results)
-
-            response = {
-                "type": "email",
-                "content": response_text,
-                "data": {
-                    "emails": emails
-                }
+        response = {
+            "type": "email",
+            "content": response_text,
+            "data": {
+                "emails": email_results
             }
-
-        except (ValueError, SyntaxError):
-
-            response = {
-                "type": "email",
-                "content": response_text,
-                "data": {
-                    "emails": []
-                }
-            }
+        }
 
     else:
 

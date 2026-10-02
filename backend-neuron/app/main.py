@@ -26,7 +26,7 @@ app.add_middleware(
     https_only=False,
 )
 
-app.include_router(gmail_router, prefix="/api/v1/auth")
+app.include_router(gmail_router, prefix="/api/v1")
 
 app.include_router(chat_router, prefix="/api/v1")
 

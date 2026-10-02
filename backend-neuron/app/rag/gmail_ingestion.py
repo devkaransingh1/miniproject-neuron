@@ -11,14 +11,14 @@ from app.rag.vector_store import collection
 
 
 BATCH_SIZE = 10
+DEFAULT_SYNC_LIMIT = 50
 
 
 def get_header(headers, name):
-
     for header in headers:
 
-        if header["name"].lower() == name.lower():
-            return header["value"]
+        if header.get("name", "").lower() == name.lower():
+            return header.get("value", "")
 
     return ""
 
@@ -29,10 +29,10 @@ def prepare_gmail_message(
     service
 ):
     """
-    Fetch a Gmail message and prepare its
-    document + metadata.
+    Fetch one Gmail message and prepare the
+    document + metadata required for RAG.
 
-    Embedding is NOT generated here.
+    Embeddings are generated separately.
     """
 
     data = service.users().messages().get(
@@ -41,7 +41,10 @@ def prepare_gmail_message(
         format="full"
     ).execute()
 
-    payload = data.get("payload", {})
+    payload = data.get(
+        "payload",
+        {}
+    )
 
     headers = payload.get(
         "headers",
@@ -113,23 +116,83 @@ Date: {date}
     }
 
 
+def index_gmail_batch(batch):
+    """
+    Generate embeddings and upsert one batch
+    of prepared Gmail messages into Chroma.
+    """
+
+    if not batch:
+        return []
+
+    documents = [
+        item["document"]
+        for item in batch
+    ]
+
+    print(
+        f"🧠 Generating embeddings for "
+        f"{len(batch)} emails..."
+    )
+
+    embeddings = generate_embeddings(
+        documents
+    )
+
+    print(
+        f"💾 Saving {len(batch)} emails to Chroma..."
+    )
+
+    collection.upsert(
+        ids=[
+            item["id"]
+            for item in batch
+        ],
+        documents=documents,
+        embeddings=embeddings,
+        metadatas=[
+            item["metadata"]
+            for item in batch
+        ]
+    )
+
+    indexed = [
+        {
+            "message_id": item["id"],
+            "subject": item["subject"],
+            "status": "indexed"
+        }
+        for item in batch
+    ]
+
+    print(
+        f"✅ Batch indexed: {len(batch)} emails"
+    )
+
+    return indexed
+
+
 def ingest_gmail_messages(
     user,
-    max_results=50
+    max_results=DEFAULT_SYNC_LIMIT
 ):
     """
     Initial Gmail → RAG synchronization.
 
-    Fetches up to max_results emails and processes
-    embeddings in batches.
+    Fetches up to max_results messages and
+    indexes them in batches.
     """
 
     service = create_gmail_service(
         user
     )
 
-    indexed = []
+    max_results = max(
+        1,
+        min(int(max_results), 100)
+    )
 
+    indexed = []
     next_page_token = None
 
     while len(indexed) < max_results:
@@ -145,7 +208,8 @@ def ingest_gmail_messages(
         )
 
         print(
-            f"📨 Requesting up to {page_size} Gmail messages..."
+            f"📨 Requesting up to "
+            f"{page_size} Gmail messages..."
         )
 
         response = service.users().messages().list(
@@ -160,7 +224,8 @@ def ingest_gmail_messages(
         )
 
         print(
-            f"📨 Gmail returned {len(messages)} messages"
+            f"📨 Gmail returned "
+            f"{len(messages)} messages"
         )
 
         if not messages:
@@ -170,16 +235,26 @@ def ingest_gmail_messages(
 
         for message in messages:
 
-            if len(indexed) + len(batch) >= max_results:
+            if (
+                len(indexed) + len(batch)
+                >= max_results
+            ):
                 break
 
+            message_id = message.get(
+                "id"
+            )
+
+            if not message_id:
+                continue
+
             print(
-                f"📥 Fetching {message['id']}"
+                f"📥 Fetching {message_id}"
             )
 
             prepared = prepare_gmail_message(
                 user,
-                message["id"],
+                message_id,
                 service
             )
 
@@ -187,52 +262,21 @@ def ingest_gmail_messages(
                 prepared
             )
 
+            if len(batch) >= BATCH_SIZE:
+
+                indexed.extend(
+                    index_gmail_batch(batch)
+                )
+
+                batch = []
+
         if batch:
-
-            print(
-                f"🧠 Generating embeddings for {len(batch)} emails..."
-            )
-
-            documents = [
-                item["document"]
-                for item in batch
-            ]
-
-            embeddings = generate_embeddings(
-                documents
-            )
-
-            print(
-                f"💾 Saving {len(batch)} emails to Chroma..."
-            )
-
-            collection.upsert(
-                ids=[
-                    item["id"]
-                    for item in batch
-                ],
-                documents=documents,
-                embeddings=embeddings,
-                metadatas=[
-                    item["metadata"]
-                    for item in batch
-                ]
-            )
-
             indexed.extend(
-                [
-                    {
-                        "message_id": item["id"],
-                        "subject": item["subject"],
-                        "status": "indexed"
-                    }
-                    for item in batch
-                ]
+                index_gmail_batch(batch)
             )
 
-            print(
-                f"✅ Batch indexed: {len(batch)} emails"
-            )
+        if len(indexed) >= max_results:
+            break
 
         next_page_token = response.get(
             "nextPageToken"
@@ -242,23 +286,36 @@ def ingest_gmail_messages(
             break
 
     print(
-        f"🏁 Initial Gmail sync completed: {len(indexed)} emails"
+        f"🏁 Initial Gmail sync completed: "
+        f"{len(indexed)} emails"
     )
 
     return indexed
 
 
-def sync_new_gmail_messages(user, max_results=50):
+def sync_new_gmail_messages(
+    user,
+    max_results=DEFAULT_SYNC_LIMIT
+):
     """
     Incremental Gmail → RAG synchronization.
 
-    Fetches emails received after the user's
-    last successful RAG synchronization.
-
-    Maximum emails processed in one sync = max_results.
+    Only messages received after the user's
+    last successful synchronization are fetched.
     """
 
-    service = create_gmail_service(user)
+    service = create_gmail_service(
+        user
+    )
+
+    max_results = max(
+        1,
+        min(int(max_results), 100)
+    )
+
+    # -----------------------------------------
+    # BUILD INCREMENTAL GMAIL QUERY
+    # -----------------------------------------
 
     if user.gmail_last_sync_at:
 
@@ -283,7 +340,15 @@ def sync_new_gmail_messages(user, max_results=50):
 
     while len(indexed) < max_results:
 
-        remaining = max_results - len(indexed)
+        remaining = (
+            max_results
+            - len(indexed)
+        )
+
+        page_size = min(
+            BATCH_SIZE,
+            remaining
+        )
 
         print(
             f"📨 Calling Gmail messages.list() "
@@ -293,13 +358,9 @@ def sync_new_gmail_messages(user, max_results=50):
         response = service.users().messages().list(
             userId="me",
             q=query,
-            maxResults=min(BATCH_SIZE, remaining),
+            maxResults=page_size,
             pageToken=next_page_token
         ).execute()
-
-        print(
-            "✅ Gmail messages.list() returned"
-        )
 
         messages = response.get(
             "messages",
@@ -307,30 +368,37 @@ def sync_new_gmail_messages(user, max_results=50):
         )
 
         print(
-            f"📨 Gmail returned {len(messages)} messages"
+            f"📨 Gmail returned "
+            f"{len(messages)} messages"
         )
 
         if not messages:
             break
 
-        # Safety: never process more than remaining limit
-        messages = messages[:remaining]
-
         batch = []
 
         for message in messages:
 
-            # Extra safety check
-            if len(indexed) + len(batch) >= max_results:
+            if (
+                len(indexed) + len(batch)
+                >= max_results
+            ):
                 break
 
+            message_id = message.get(
+                "id"
+            )
+
+            if not message_id:
+                continue
+
             print(
-                f"📥 Fetching {message['id']}"
+                f"📥 Fetching {message_id}"
             )
 
             prepared = prepare_gmail_message(
                 user,
-                message["id"],
+                message_id,
                 service
             )
 
@@ -338,107 +406,12 @@ def sync_new_gmail_messages(user, max_results=50):
                 prepared
             )
 
-            # Process batch of 10
-            if len(batch) >= BATCH_SIZE:
-
-                documents = [
-                    item["document"]
-                    for item in batch
-                ]
-
-                print(
-                    f"🧠 Generating embeddings for "
-                    f"{len(batch)} emails..."
-                )
-
-                embeddings = generate_embeddings(
-                    documents
-                )
-
-                print(
-                    f"💾 Saving {len(batch)} emails to Chroma..."
-                )
-
-                collection.upsert(
-                    ids=[
-                        item["id"]
-                        for item in batch
-                    ],
-                    documents=documents,
-                    embeddings=embeddings,
-                    metadatas=[
-                        item["metadata"]
-                        for item in batch
-                    ]
-                )
-
-                indexed.extend(
-                    [
-                        {
-                            "message_id": item["id"],
-                            "subject": item["subject"],
-                            "status": "indexed"
-                        }
-                        for item in batch
-                    ]
-                )
-
-                print(
-                    f"✅ Batch indexed: {len(batch)} emails"
-                )
-
-                batch = []
-
-        # Process remaining emails in the current page
         if batch:
 
-            documents = [
-                item["document"]
-                for item in batch
-            ]
-
-            print(
-                f"🧠 Generating embeddings for "
-                f"{len(batch)} emails..."
-            )
-
-            embeddings = generate_embeddings(
-                documents
-            )
-
-            print(
-                f"💾 Saving {len(batch)} emails to Chroma..."
-            )
-
-            collection.upsert(
-                ids=[
-                    item["id"]
-                    for item in batch
-                ],
-                documents=documents,
-                embeddings=embeddings,
-                metadatas=[
-                    item["metadata"]
-                    for item in batch
-                ]
-            )
-
             indexed.extend(
-                [
-                    {
-                        "message_id": item["id"],
-                        "subject": item["subject"],
-                        "status": "indexed"
-                    }
-                    for item in batch
-                ]
+                index_gmail_batch(batch)
             )
 
-            print(
-                f"✅ Final batch indexed: {len(batch)} emails"
-            )
-
-        # Stop once 50 emails have been processed
         if len(indexed) >= max_results:
             break
 
@@ -457,21 +430,21 @@ def sync_new_gmail_messages(user, max_results=50):
     return indexed
 
 
-
-
 def update_gmail_sync_time(
     user,
     db
 ):
+    """
+    Store the timestamp of the latest
+    successful Gmail RAG synchronization.
+    """
 
     user.gmail_last_sync_at = datetime.now(
         timezone.utc
     )
 
     db.add(user)
-
     db.commit()
-
     db.refresh(user)
 
     return user.gmail_last_sync_at

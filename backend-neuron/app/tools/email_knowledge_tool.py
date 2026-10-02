@@ -1,5 +1,6 @@
 
 from datetime import datetime, timezone
+import json
 
 from langchain_core.tools import tool
 
@@ -16,37 +17,59 @@ from app.rag.retriever import retrieve_relevant_emails
 
 SYNC_INTERVAL_MINUTES = 30
 
+# -----------------------------------------
+# RAG CONTEXT LIMITS
+# -----------------------------------------
+
+MAX_TOTAL_CONTEXT_CHARS = 6000
+MAX_EMAIL_CONTENT_CHARS = 1500
+
 
 def create_email_knowledge_tool(user_id: int):
 
     @tool
     def email_knowledge(query: str) -> str:
         """
-        Search the authenticated user's email knowledge.
+        Search the authenticated user's historical email knowledge.
 
-        Use this tool whenever the user asks about their emails,
-        inbox, recent emails, senders, subjects, internship emails,
-        job emails, or information contained in their emails.
+        Use this tool for semantic and historical questions such as:
 
-        The tool automatically keeps the email knowledge up to date
-        before retrieving relevant information.
+        - internship history
+        - job opportunities
+        - recruiter conversations
+        - historical email discussions
+        - information spread across older emails
+        - summaries of previous email conversations
+        - patterns across email history
+
+        Do NOT use this tool for simple live/latest Gmail lookups.
         """
 
         db = SessionLocal()
 
         try:
+            # -----------------------------------------
+            # GET AUTHENTICATED USER
+            # -----------------------------------------
+
             user = db.query(User).filter(
                 User.id == user_id
             ).first()
 
             if not user:
-                return "Authenticated user not found."
+
+                return json.dumps({
+                    "error": "Authenticated user not found."
+                })
 
             if not user.is_gmail_connected:
-                return "Gmail is not connected."
+
+                return json.dumps({
+                    "error": "Gmail is not connected."
+                })
 
             # -----------------------------------------
-            # CHECK SYNC FRESHNESS
+            # CHECK RAG SYNC FRESHNESS
             # -----------------------------------------
 
             sync_required = False
@@ -64,13 +87,18 @@ def create_email_knowledge_tool(user_id: int):
                         tzinfo=timezone.utc
                     )
 
-                now = datetime.now(timezone.utc)
+                now = datetime.now(
+                    timezone.utc
+                )
 
                 elapsed_minutes = (
                     now - last_sync
                 ).total_seconds() / 60
 
-                if elapsed_minutes >= SYNC_INTERVAL_MINUTES:
+                if (
+                    elapsed_minutes
+                    >= SYNC_INTERVAL_MINUTES
+                ):
                     sync_required = True
 
             # -----------------------------------------
@@ -79,23 +107,31 @@ def create_email_knowledge_tool(user_id: int):
 
             if sync_required:
 
-                print("🔄 Gmail RAG sync required")
+                print(
+                    "🔄 Gmail RAG sync required"
+                )
 
-                sync_new_gmail_messages(user)
+                sync_new_gmail_messages(
+                    user
+                )
 
                 update_gmail_sync_time(
                     user,
                     db
                 )
 
-                print("✅ Gmail RAG sync completed")
+                print(
+                    "✅ Gmail RAG sync completed"
+                )
 
             else:
 
-                print("⚡ Gmail RAG is fresh")
+                print(
+                    "⚡ Gmail RAG is fresh"
+                )
 
             # -----------------------------------------
-            # RAG RETRIEVAL
+            # SEMANTIC RETRIEVAL
             # -----------------------------------------
 
             results = retrieve_relevant_emails(
@@ -104,10 +140,88 @@ def create_email_knowledge_tool(user_id: int):
                 top_k=5
             )
 
-            if not results:
-                return "No relevant emails found."
+            # -----------------------------------------
+            # NO RESULTS
+            # -----------------------------------------
 
-            return str(results)
+            if not results:
+
+                return json.dumps({
+                    "count": 0,
+                    "emails": []
+                })
+
+            # -----------------------------------------
+            # LIMIT RAG CONTEXT
+            # -----------------------------------------
+
+            clean_results = []
+
+            total_chars = 0
+
+            for email in results:
+
+                content = email.get(
+                    "content",
+                    ""
+                )
+
+                remaining_chars = (
+                    MAX_TOTAL_CONTEXT_CHARS
+                    - total_chars
+                )
+
+                if remaining_chars <= 0:
+                    break
+
+                content_limit = min(
+                    MAX_EMAIL_CONTENT_CHARS,
+                    remaining_chars
+                )
+
+                content = content[:content_limit]
+
+                clean_results.append({
+                    "message_id": email.get(
+                        "message_id",
+                        ""
+                    ),
+                    "thread_id": email.get(
+                        "thread_id",
+                        ""
+                    ),
+                    "content": content,
+                    "subject": email.get(
+                        "subject",
+                        ""
+                    ),
+                    "sender": email.get(
+                        "sender",
+                        ""
+                    ),
+                    "recipient": email.get(
+                        "recipient",
+                        ""
+                    ),
+                    "date": email.get(
+                        "date",
+                        ""
+                    ),
+                    "distance": email.get(
+                        "distance"
+                    )
+                })
+
+                total_chars += len(content)
+
+            # -----------------------------------------
+            # RETURN STRUCTURED RESULT
+            # -----------------------------------------
+
+            return json.dumps({
+                "count": len(clean_results),
+                "emails": clean_results
+            })
 
         except Exception as e:
 
@@ -116,10 +230,12 @@ def create_email_knowledge_tool(user_id: int):
                 str(e)
             )
 
-            return (
-                "I couldn't access the user's email knowledge "
-                "right now."
-            )
+            return json.dumps({
+                "error": (
+                    "I couldn't access the user's "
+                    "email knowledge right now."
+                )
+            })
 
         finally:
 
