@@ -1,6 +1,11 @@
-from app.rag.embeddings import client, EMBEDDING_MODEL
+
+from app.rag.embeddings import (
+    client,
+    EMBEDDING_MODEL,
+    EMBEDDING_DIMENSION,
+)
+
 from app.rag.vector_store import collection
-from google.genai import types
 
 
 def retrieve_relevant_emails(
@@ -8,17 +13,18 @@ def retrieve_relevant_emails(
     query: str,
     top_k: int = 5
 ):
-    response = client.models.embed_content(
+    # Generate embedding for the user's search query
+    response = client.embed(
         model=EMBEDDING_MODEL,
-        contents=query,
-        config=types.EmbedContentConfig(
-            task_type="RETRIEVAL_QUERY",
-            output_dimensionality=768
-        )
+        input_type="search_query",
+        texts=[query],
+        output_dimension=EMBEDDING_DIMENSION,
+        embedding_types=["float"],
     )
 
-    query_embedding = response.embeddings[0].values
+    query_embedding = response.embeddings.float[0]
 
+    # Search Chroma
     results = collection.query(
         query_embeddings=[query_embedding],
         n_results=top_k,
@@ -28,12 +34,17 @@ def retrieve_relevant_emails(
                 {"source": {"$eq": "gmail"}}
             ]
         },
-        include=["documents", "metadatas", "distances"]
+        include=[
+            "documents",
+            "metadatas",
+            "distances"
+        ]
     )
 
     emails = []
 
     for i, document in enumerate(results["documents"][0]):
+
         metadata = results["metadatas"][0][i]
         distance = results["distances"][0][i]
 
@@ -47,3 +58,4 @@ def retrieve_relevant_emails(
         })
 
     return emails
+

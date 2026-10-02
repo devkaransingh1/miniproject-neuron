@@ -1,3 +1,4 @@
+
 import chromadb
 
 
@@ -7,10 +8,11 @@ client = chromadb.PersistentClient(
 
 
 collection = client.get_or_create_collection(
-    name="neuron_documents",
+    name="neuron_documents_cohere",
     configuration={
         "hnsw": {
             "space": "cosine"
         }
     }
 )
+

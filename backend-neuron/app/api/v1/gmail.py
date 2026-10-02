@@ -37,30 +37,83 @@ def connect_gmail(request: Request,user=Depends(get_current_user)):
 
 
     
-@router.get('/connect/gmail/callback')
-def gmail_callback(request:Request,user=Depends(get_current_user),db:Session=Depends(get_db)):
-    
-    code = request.query_params.get('code')
-    
+
+@router.get("/connect/gmail/callback")
+def gmail_callback(
+    request: Request,
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    code = request.query_params.get("code")
+
     if not code:
-        raise HTTPException(status_code=400,detail="gmail connection Authorization code missing")
-    
+        raise HTTPException(
+            status_code=400,
+            detail="gmail connection Authorization code missing"
+        )
+
     flow = create_gmail_flow()
+
     flow.fetch_token(code=code)
-    
+
+    # Save Gmail OAuth credentials
     user.gmail_access_token = flow.credentials.token
     user.gmail_refresh_token = flow.credentials.refresh_token
     user.gmail_token_expiry = flow.credentials.expiry
     user.is_gmail_connected = True
-    
+
     db.add(user)
     db.commit()
     db.refresh(user)
-    
+
+    # -----------------------------------------
+    # INITIAL GMAIL → RAG SYNC
+    # -----------------------------------------
+
+    if not user.gmail_initial_sync_completed:
+
+        from app.rag.gmail_ingestion import (
+            ingest_gmail_messages,
+            update_gmail_sync_time,
+        )
+
+        try:
+
+            ingest_gmail_messages(
+                user,
+                max_results=50
+            )
+
+            # Mark the sync time only after
+            # successful indexing.
+            update_gmail_sync_time(
+                user,
+                db
+            )
+
+            user.gmail_initial_sync_completed = True
+
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+
+        except Exception as e:
+
+            print(
+                "❌ Initial Gmail RAG sync failed:",
+                str(e)
+            )
+
+            # Gmail connection itself remains valid.
+            # Initial RAG sync can be retried later.
+
     return {
-        "message":"gmail connected succesfully",
-        "connected":True
+        "message": "gmail connected successfully",
+        "connected": True,
+        "rag_initial_sync_completed": user.gmail_initial_sync_completed
     }
+
+
     
   
 @router.get("/gmail/profile")
@@ -319,6 +372,7 @@ def gmail_message(
 
     return email
 
+
 def search_gmail_messages(user, query, max_results=10):
     service = create_gmail_service(user)
 
@@ -348,7 +402,8 @@ def search_gmail_messages(user, query, max_results=10):
             "to": "",
             "subject": "",
             "date": "",
-            "body": data.get("snippet", "")
+            "body": data.get("snippet", ""),
+            "internal_date": int(data.get("internalDate", 0))
         }
 
         for header in headers:
@@ -366,7 +421,15 @@ def search_gmail_messages(user, query, max_results=10):
 
         emails.append(email)
 
+    # Explicitly sort newest → oldest
+    emails.sort(
+        key=lambda email: email["internal_date"],
+        reverse=True
+    )
+
     return emails
+
+
 
 
 

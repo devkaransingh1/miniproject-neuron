@@ -18,7 +18,13 @@ Base.metadata.create_all(bind=engine)
 
 app.include_router(auth_router,prefix='/api/v1/auth')
 
-app.add_middleware(SessionMiddleware,secret_key="mysecretkey",)
+app.add_middleware(
+    SessionMiddleware,
+    secret_key="mysecretkey",
+    max_age=60 * 60 * 24 * 7,
+    same_site="lax",
+    https_only=False,
+)
 
 app.include_router(gmail_router, prefix="/api/v1/auth")
 
