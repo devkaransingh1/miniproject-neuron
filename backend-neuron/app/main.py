@@ -6,6 +6,7 @@ from app.api.v1.rag import router as rag_router
 from app.api.v1.conversations import router as conversations_router
 from app.api.v1.gmail_reconnect import router as gmail_reconnect_router
 from app.api.v1.integrations import router as integrations_router
+from app.api.v1.calendar import router as calendar_router
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.db.base import Base
@@ -47,6 +48,11 @@ app.include_router(
 
 app.include_router(
     integrations_router,
+    prefix="/api/v1"
+)
+
+app.include_router(
+    calendar_router,
     prefix="/api/v1"
 )
 

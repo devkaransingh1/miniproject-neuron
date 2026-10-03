@@ -7,6 +7,7 @@ from app.core.config import (
     GOOGLE_CLIENT_SECRET,
     GOOGLE_REDIRECT_URI,
     GOOGLE_GMAIL_REDIRECT_URI,
+    GOOGLE_CALENDAR_REDIRECT_URI,
 )
 
 GOOGLE_LOGIN_SCOPES = [
@@ -19,6 +20,9 @@ GMAIL_SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
 ]
 
+CALENDAR_SCOPES = [
+    "https://www.googleapis.com/auth/calendar.readonly",
+]
 
 def create_google_flow():
     flow = Flow.from_client_config(
@@ -79,3 +83,25 @@ def create_gmail_service(user):
     )
 
     return service
+
+
+
+def create_calendar_flow():
+    flow = Flow.from_client_config(
+        {
+            "web": {
+                "client_id": GOOGLE_CLIENT_ID,
+                "client_secret": GOOGLE_CLIENT_SECRET,
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "redirect_uris": [GOOGLE_CALENDAR_REDIRECT_URI],
+            }
+        },
+        scopes=CALENDAR_SCOPES,
+        autogenerate_code_verifier=False,
+    )
+
+    flow.redirect_uri = GOOGLE_CALENDAR_REDIRECT_URI
+
+    return flow
+

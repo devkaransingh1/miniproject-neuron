@@ -2,6 +2,7 @@
 from sqlalchemy import Column, Integer, String, Boolean, Text, DateTime
 from sqlalchemy.orm import relationship
 
+
 from app.db.base import Base
 
 
@@ -40,4 +41,28 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan"
     )
+    
+    # Google Calendar integration
+    is_calendar_connected = Column(
+        Boolean,
+        default=False,
+        nullable=False
+    )
+    
+    calendar_access_token = Column(
+    Text,
+    nullable=True
+)
+    
+    calendar_refresh_token = Column(
+    Text,
+    nullable=True
+)
+    
+    calendar_token_expiry = Column(
+    DateTime,
+    nullable=True
+)
+    
+    
 

@@ -16,7 +16,7 @@ def get_integrations_status(
             "connected": user.is_gmail_connected
         },
         "calendar": {
-            "connected": False
+            "connected": user.is_calendar_connected
         },
         "github": {
             "connected": False

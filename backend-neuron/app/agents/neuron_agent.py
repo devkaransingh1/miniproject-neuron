@@ -9,6 +9,7 @@ from app.tools.gmail_search_tool import (
 )
 
 from app.tools.gmail_message_tool import ( create_gmail_message_tool, )
+from app.tools.calendar_search_tool import create_calendar_search_tool
 
 from app.tools.email_knowledge_tool import (
     create_email_knowledge_tool,
@@ -31,6 +32,8 @@ def create_neuron_agent(user_id: int):
     user_id
     )
     
+    calendar_search_tool = create_calendar_search_tool(user_id)
+    
     gmail_search_tool = create_gmail_search_tool(
         user_id
     )
@@ -47,6 +50,7 @@ def create_neuron_agent(user_id: int):
     gmail_search_tool,
     gmail_message_tool,
     email_knowledge_tool,
+    calendar_search_tool,
 ]
 
     print("🔥 AGENT TOOLS:", tools)
@@ -312,6 +316,12 @@ Do not return JSON unless the API layer explicitly
 requires structured output.
 
 Return a normal natural-language answer.
+
+Calendar rules:
+- Use calendar_search for questions about the user's Google Calendar, events, meetings, appointments, schedules, or upcoming plans.
+- Calendar data is always live data from Google Calendar. Do not use RAG for Calendar questions.
+- Never invent calendar events.
+- For calendar-only questions, do not call Gmail tools unless the user explicitly asks for email information too.
 """
     )
 
