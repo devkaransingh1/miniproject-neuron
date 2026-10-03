@@ -1,5 +1,6 @@
 from google_auth_oauthlib.flow import Flow  # type: ignore[import-not-found]
-from google.oauth2.credentials import Credentials
+
+from app.integrations.google.token_manager import get_gmail_credentials
 from googleapiclient.discovery import build
 from app.core.config import (
     GOOGLE_CLIENT_ID,
@@ -69,14 +70,7 @@ def get_google_authorization_url():
     return authorization_url, state
 
 def create_gmail_service(user):
-    credentials = Credentials(
-        token=user.gmail_access_token,
-        refresh_token=user.gmail_refresh_token,
-        token_uri="https://oauth2.googleapis.com/token",
-        client_id=GOOGLE_CLIENT_ID,
-        client_secret=GOOGLE_CLIENT_SECRET,
-        scopes=GMAIL_SCOPES,
-    )
+    credentials = get_gmail_credentials(user)
 
     service = build(
         "gmail",

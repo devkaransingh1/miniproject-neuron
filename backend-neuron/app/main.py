@@ -4,6 +4,7 @@ from app.api.v1.chat import router as chat_router
 from app.api.v1.gmail import router as gmail_router
 from app.api.v1.rag import router as rag_router
 from app.api.v1.conversations import router as conversations_router
+from app.api.v1.gmail_reconnect import router as gmail_reconnect_router
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.db.base import Base
@@ -33,4 +34,12 @@ app.include_router(chat_router, prefix="/api/v1")
 app.include_router(conversations_router,prefix="/api/v1")
 
 app.include_router(rag_router, prefix="/api/v1")
+
+#will remove it once the app will be in production in cloud console
+
+app.include_router(
+    gmail_reconnect_router,
+    prefix="/api/v1/auth"
+)
+# till here
 

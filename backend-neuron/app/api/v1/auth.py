@@ -6,6 +6,7 @@ import requests
 
 from app.db.session import get_db
 from app.models.user import User
+from app.core.config import FRONTEND_URL
 
 from app.integrations.google.oauth import (
     get_google_authorization_url,
@@ -57,7 +58,7 @@ def google_login(request: Request):
     # Already logged in
     if user_id:
         return RedirectResponse(
-            url="/api/v1/auth/me"
+            url=f"{FRONTEND_URL}/chat"
         )
 
     authorization_url, state = get_google_authorization_url()
@@ -122,7 +123,7 @@ def google_callback(
         request.session["user_id"] = user.id
 
         return RedirectResponse(
-            url="/api/v1/auth/me"
+            url=f"{FRONTEND_URL}/chat"
         )
 
     # --------------------------------------------------------
@@ -143,7 +144,7 @@ def google_callback(
     request.session["user_id"] = user.id
 
     return RedirectResponse(
-        url="/api/v1/auth/me"
+        url=f"{FRONTEND_URL}/chat"
     )
 
 
@@ -161,7 +162,8 @@ def me(
     return {
         "message": "profile accessed",
         "name": user.name,
-        "email": user.email
+        "email": user.email,
+        "picture_url": user.picture_url
     }
 
 
@@ -177,4 +179,3 @@ def logout(request: Request):
     return {
         "message": "user logged out successfully"
     }
-
