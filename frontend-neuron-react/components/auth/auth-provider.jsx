@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { useLocation } from "react-router-dom";
 import { AuthContext } from "@/components/auth/auth-context";
 import {
@@ -22,10 +22,15 @@ export function AuthProvider({ children }) {
     return () => controller.abort();
   }, [pathname]);
 
+  const refreshCurrentAuth = useCallback(
+    () => refreshAuth(undefined, pathname),
+    [pathname],
+  );
+
   const value = {
     ...auth,
     status: auth.path === pathname ? auth.status : "checking",
-    refreshAuth: () => refreshAuth(undefined, pathname),
+    refreshAuth: refreshCurrentAuth,
     logout,
   };
 

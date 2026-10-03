@@ -61,7 +61,7 @@ export function ProtectedRoute({ children }) {
 
   if (status === "checking") return <CheckingSession />;
   if (status === "unauthenticated") {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/login" replace />;
   }
 
   return <AuthStatus>{children}</AuthStatus>;

@@ -56,8 +56,12 @@ function CodeBlock({ className = "", children, ...props }) {
           background: "#0a0a0a",
           fontSize: "0.8rem",
           lineHeight: 1.7,
+          whiteSpace: "pre-wrap",
+          overflowWrap: "anywhere",
+          wordBreak: "break-word",
         }}
         codeTagProps={{ style: { fontFamily: "var(--font-mono)" } }}
+        wrapLongLines
         {...props}
       >
         {code}
@@ -68,7 +72,7 @@ function CodeBlock({ className = "", children, ...props }) {
 
 export function ChatMarkdown({ content }) {
   return (
-    <div className="chat-markdown min-w-0 text-[15px] leading-7 text-white/85">
+    <div className="chat-markdown min-w-0 max-w-full text-[15px] leading-7 text-white/85 [overflow-wrap:anywhere]">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
@@ -130,19 +134,19 @@ export function ChatMarkdown({ content }) {
           ),
           hr: () => <hr className="my-7 border-white/10" />,
           table: ({ children }) => (
-            <div className="my-5 overflow-x-auto rounded-lg border border-white/10">
-              <table className="w-full border-collapse text-left text-sm">
+            <div className="my-5 max-w-full overflow-hidden rounded-lg border border-white/10">
+              <table className="w-full table-fixed border-collapse text-left text-sm">
                 {children}
               </table>
             </div>
           ),
           th: ({ children }) => (
-            <th className="border-b border-white/10 bg-white/[0.03] px-3 py-2 font-medium text-white">
+            <th className="break-words border-b border-white/10 bg-white/[0.03] px-2 py-2 font-medium text-white [overflow-wrap:anywhere] sm:px-3">
               {children}
             </th>
           ),
           td: ({ children }) => (
-            <td className="border-b border-white/5 px-3 py-2 text-white/70">
+            <td className="break-words border-b border-white/5 px-2 py-2 text-white/70 [overflow-wrap:anywhere] sm:px-3">
               {children}
             </td>
           ),

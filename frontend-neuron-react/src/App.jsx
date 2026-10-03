@@ -5,6 +5,7 @@ import {
   PublicOnlyRoute,
 } from "@/components/auth/auth-routes";
 import { AuthProvider } from "@/components/auth/auth-provider";
+import { useAuth } from "@/components/auth/use-auth";
 import { Navigation } from "@/components/landing/navigation";
 import { HeroSection } from "@/components/landing/hero-section";
 import { FeaturesSection } from "@/components/landing/features-section";
@@ -31,6 +32,16 @@ function LoadingChatPage() {
     <main className="flex min-h-screen items-center justify-center bg-[#080808] text-sm text-white/45">
       Loading your workspace…
     </main>
+  );
+}
+
+function AuthenticatedChatPage() {
+  const { user } = useAuth();
+
+  return (
+    <Suspense fallback={<LoadingChatPage />}>
+      <ChatPage key={user?.email ?? "authenticated-user"} />
+    </Suspense>
   );
 }
 
@@ -78,9 +89,7 @@ export default function App() {
           path="/chat"
           element={
             <ProtectedRoute>
-              <Suspense fallback={<LoadingChatPage />}>
-                <ChatPage />
-              </Suspense>
+              <AuthenticatedChatPage />
             </ProtectedRoute>
           }
         />

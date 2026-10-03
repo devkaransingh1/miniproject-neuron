@@ -24,9 +24,15 @@ export function sendChatMessage(message, conversationId = null, signal) {
   });
 }
 
-/** @returns {Promise<ConversationSummary[]>} */
-export function getConversations() {
-  return apiRequest("/api/v1/conversations");
+/**
+ * @param {AbortSignal} [signal]
+ * @returns {Promise<ConversationSummary[]>}
+ */
+export function getConversations(signal) {
+  return apiRequest("/api/v1/conversations", {
+    signal,
+    cache: "no-store",
+  });
 }
 
 /**
@@ -37,6 +43,6 @@ export function getConversations() {
 export function getConversation(conversationId, signal) {
   return apiRequest(
     `/api/v1/conversations/${encodeURIComponent(conversationId)}`,
-    { signal },
+    { signal, cache: "no-store" },
   );
 }
