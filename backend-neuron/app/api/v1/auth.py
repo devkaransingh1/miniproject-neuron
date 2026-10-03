@@ -51,15 +51,25 @@ def get_current_user(
 # ============================================================
 
 @router.get("/google/login")
-def google_login(request: Request):
+def google_login(
+    request: Request,
+    db: Session = Depends(get_db),
+):
 
     user_id = request.session.get("user_id")
 
     # Already logged in
     if user_id:
-        return RedirectResponse(
-            url=f"{FRONTEND_URL}/chat"
-        )
+        user = db.query(User).filter(
+            User.id == user_id
+        ).first()
+
+        if user:
+            return RedirectResponse(
+                url=f"{FRONTEND_URL}/chat"
+            )
+
+        request.session.clear()
 
     authorization_url, state = get_google_authorization_url()
 

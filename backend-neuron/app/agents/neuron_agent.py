@@ -8,6 +8,8 @@ from app.tools.gmail_search_tool import (
     create_gmail_search_tool,
 )
 
+from app.tools.gmail_message_tool import ( create_gmail_message_tool, )
+
 from app.tools.email_knowledge_tool import (
     create_email_knowledge_tool,
 )
@@ -25,6 +27,10 @@ def create_neuron_agent(user_id: int):
     # LIVE GMAIL TOOL
     # -----------------------------------------
 
+    gmail_message_tool = create_gmail_message_tool(
+    user_id
+    )
+    
     gmail_search_tool = create_gmail_search_tool(
         user_id
     )
@@ -38,9 +44,10 @@ def create_neuron_agent(user_id: int):
     )
 
     tools = [
-        gmail_search_tool,
-        email_knowledge_tool,
-    ]
+    gmail_search_tool,
+    gmail_message_tool,
+    email_knowledge_tool,
+]
 
     print("🔥 AGENT TOOLS:", tools)
 
@@ -213,12 +220,12 @@ Use only information returned by the tools.
 If a tool returns no relevant emails, clearly state
 that no relevant emails were found.
 
+
 ==================================================
 6. LIVE EMAIL DETAILS
 ==================================================
 
-The gmail_search tool returns structured email data
-including:
+The gmail_search tool returns:
 
 - id
 - sender
@@ -227,10 +234,55 @@ including:
 - date
 - snippet
 
-Use these fields directly when answering.
+The snippet is only a preview and MUST NOT be treated
+as the complete email body.
 
-If the user asks for the full content of an email,
-the live Gmail message endpoint may be needed later.
+If the user asks about the actual content, meaning,
+details, explanation, or complete text of a specific
+email:
+
+1. First use gmail_search to find the relevant email.
+2. Get the email's message ID.
+3. Then call gmail_get_message using that message ID.
+4. Use the returned "body" field to answer the user.
+
+IMPORTANT:
+
+If the snippet does not contain enough information
+to answer the question, ALWAYS use gmail_get_message.
+
+Examples:
+
+User:
+"What does my latest email say?"
+
+Action:
+1. gmail_search → max_results=1
+2. gmail_get_message → use the returned message ID
+3. Answer using the full body.
+
+User:
+"What did Amazon say in the email I received?"
+
+Action:
+1. gmail_search → find the Amazon email
+2. gmail_get_message → fetch the full body
+3. Answer using the full body.
+
+User:
+"Give me the complete content of my latest email."
+
+Action:
+1. gmail_search → max_results=1
+2. gmail_get_message → fetch the full body
+3. Answer using the body.
+
+Do NOT assume that the Gmail snippet is the full email.
+
+Do NOT invent information that is not present in the
+returned email body.
+
+
 
 ==================================================
 7. GENERAL QUESTIONS

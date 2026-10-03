@@ -1,5 +1,6 @@
 
-from fastapi import APIRouter, Request, Depends, HTTPException
+from fastapi import APIRouter, Request, Depends, HTTPException, BackgroundTasks
+from app.services.gmail_sync import run_initial_gmail_sync
 from sqlalchemy.orm import Session
 from fastapi.responses import RedirectResponse
 
@@ -41,6 +42,8 @@ def connect_gmail(
 
     authorization_url, state = flow.authorization_url(
         access_type="offline",
+        prompt="consent",
+        login_hint=user.email,
     )
 
     request.session["gmail_oauth_state"] = state
@@ -50,9 +53,12 @@ def connect_gmail(
     )
 
 
+
+
 @router.get("/connect/gmail/callback")
 def gmail_callback(
     request: Request,
+    background_tasks: BackgroundTasks,
     user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -83,83 +89,32 @@ def gmail_callback(
     user.gmail_token_expiry = flow.credentials.expiry
     user.is_gmail_connected = True
 
+    # Initial sync has not completed yet.
+    user.gmail_initial_sync_completed = False
+    user.gmail_sync_status = "syncing"
+
     db.add(user)
     db.commit()
     db.refresh(user)
 
     # --------------------------------------------------------
-    # INITIAL GMAIL → RAG SYNC
+    # START RAG SYNC IN BACKGROUND
     # --------------------------------------------------------
 
-    if not user.gmail_initial_sync_completed:
+    background_tasks.add_task(
+        run_initial_gmail_sync,
+        user.id
+    )
 
-        from app.rag.gmail_ingestion import (
-            ingest_gmail_messages,
-            update_gmail_sync_time,
-        )
+    # --------------------------------------------------------
+    # REDIRECT TO CHAT IMMEDIATELY
+    # --------------------------------------------------------
 
-        try:
-
-            ingest_gmail_messages(
-                user,
-                max_results=50
-            )
-
-            # Mark sync time only after successful indexing.
-            update_gmail_sync_time(
-                user,
-                db
-            )
-
-            user.gmail_initial_sync_completed = True
-
-            db.add(user)
-            db.commit()
-            db.refresh(user)
-
-        except Exception as e:
-
-            print(
-                "❌ Initial Gmail RAG sync failed:",
-                str(e)
-            )
-
-            # Gmail connection remains valid.
-            # RAG synchronization can be retried later.
-
-    return {
-        "message": "gmail connected successfully",
-        "connected": True,
-        "rag_initial_sync_completed": user.gmail_initial_sync_completed
-    }
+    return RedirectResponse(
+        url="http://localhost:5173/chat"
+    )
 
 
-# ============================================================
-# GMAIL PROFILE
-# ============================================================
-
-@router.get("/gmail/profile")
-def gmail_profile(
-    user=Depends(get_current_user)
-):
-
-    if not user.is_gmail_connected:
-        raise HTTPException(
-            status_code=401,
-            detail="gmail access not granted"
-        )
-
-    service = create_gmail_service(user)
-
-    profile = service.users().getProfile(
-        userId="me"
-    ).execute()
-
-    return {
-        "email": profile["emailAddress"],
-        "messages_total": profile["messagesTotal"],
-        "threads_total": profile["threadsTotal"]
-    }
 
 
 # ============================================================
@@ -495,6 +450,7 @@ def gmail_messages(
 # GET SINGLE FULL GMAIL MESSAGE
 # ============================================================
 
+
 @router.get("/gmail/messages/{message_id}")
 def gmail_message(
     message_id: str,
@@ -507,61 +463,11 @@ def gmail_message(
             detail="gmail access not granted"
         )
 
-    service = create_gmail_service(user)
-
-    data = service.users().messages().get(
-        userId="me",
-        id=message_id,
-        format="full"
-    ).execute()
-
-    headers = data.get(
-        "payload",
-        {}
-    ).get(
-        "headers",
-        []
+    return get_gmail_message(
+        user=user,
+        message_id=message_id
     )
 
-    email = {
-        "id": data["id"],
-        "thread_id": data.get(
-            "threadId",
-            ""
-        ),
-        "from": "",
-        "to": "",
-        "subject": "",
-        "date": "",
-        "body": ""
-    }
-
-    for header in headers:
-
-        name = header["name"].lower()
-        value = header["value"]
-
-        if name == "from":
-
-            email["from"] = value
-
-        elif name == "to":
-
-            email["to"] = value
-
-        elif name == "subject":
-
-            email["subject"] = value
-
-        elif name == "date":
-
-            email["date"] = value
-
-    email["body"] = extract_email_body(
-        data["payload"]
-    )
-
-    return email
 
 
 # ============================================================
@@ -745,4 +651,81 @@ def search_gmail(
         "count": len(clean_emails),
         "emails": clean_emails
     }
+    
+    
+@router.get("/gmail/sync-status")
+def gmail_sync_status(
+    user=Depends(get_current_user)
+):
+    return {
+        "connected": user.is_gmail_connected,
+        "sync_status": user.gmail_sync_status,
+        "sync_completed": user.gmail_initial_sync_completed
+    }
+
+
+def get_gmail_message(
+    user,
+    message_id: str
+):
+    """
+    Fetch the complete Gmail message for a user.
+
+    This is reusable by both:
+    - the FastAPI Gmail message endpoint
+    - the LangChain Gmail message tool
+    """
+
+    service = create_gmail_service(user)
+
+    data = service.users().messages().get(
+        userId="me",
+        id=message_id,
+        format="full"
+    ).execute()
+
+    headers = data.get(
+        "payload",
+        {}
+    ).get(
+        "headers",
+        []
+    )
+
+    email = {
+        "id": data["id"],
+        "thread_id": data.get(
+            "threadId",
+            ""
+        ),
+        "from": "",
+        "to": "",
+        "subject": "",
+        "date": "",
+        "body": ""
+    }
+
+    for header in headers:
+
+        name = header["name"].lower()
+        value = header["value"]
+
+        if name == "from":
+            email["from"] = value
+
+        elif name == "to":
+            email["to"] = value
+
+        elif name == "subject":
+            email["subject"] = value
+
+        elif name == "date":
+            email["date"] = value
+
+    email["body"] = extract_email_body(
+        data["payload"]
+    )
+
+    return email
+
 

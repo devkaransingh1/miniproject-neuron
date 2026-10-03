@@ -1,4 +1,6 @@
+
 from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime
+from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 
 from app.db.base import Base
@@ -11,7 +13,7 @@ class Message(Base):
 
     conversation_id = Column(
         Integer,
-        ForeignKey("conversations.id"),
+        ForeignKey("conversations.id", ondelete="CASCADE"),
         nullable=False
     )
 
@@ -23,3 +25,9 @@ class Message(Base):
         DateTime,
         default=lambda: datetime.now(timezone.utc)
     )
+
+    conversation = relationship(
+        "Conversation",
+        back_populates="messages"
+    )
+

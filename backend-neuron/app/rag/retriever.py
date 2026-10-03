@@ -8,10 +8,14 @@ from app.rag.embeddings import (
 from app.rag.vector_store import collection
 
 
+MAX_EMAIL_CONTENT_CHARS = 1200
+MAX_TOTAL_CONTEXT_CHARS = 4000
+
+
 def retrieve_relevant_emails(
     user_id: int,
     query: str,
-    top_k: int = 5
+    top_k: int = 3
 ):
     """
     Retrieve historically relevant Gmail messages
@@ -19,6 +23,9 @@ def retrieve_relevant_emails(
 
     This function is for semantic / historical questions.
     Live or latest-email questions should use Gmail API directly.
+
+    Retrieved email content is deliberately capped so that
+    large email bodies cannot consume the entire LLM context.
     """
 
     if not query or not query.strip():
@@ -26,7 +33,7 @@ def retrieve_relevant_emails(
 
     top_k = max(
         1,
-        min(int(top_k), 20)
+        min(int(top_k), 10)
     )
 
     # -----------------------------------------
@@ -95,7 +102,12 @@ def retrieve_relevant_emails(
 
     emails = []
 
+    total_content_chars = 0
+
     for i, document in enumerate(documents[0]):
+
+        if total_content_chars >= MAX_TOTAL_CONTEXT_CHARS:
+            break
 
         metadata = (
             metadatas[0][i]
@@ -109,6 +121,22 @@ def retrieve_relevant_emails(
             else None
         )
 
+        document = document or ""
+
+        remaining_chars = (
+            MAX_TOTAL_CONTEXT_CHARS
+            - total_content_chars
+        )
+
+        content_limit = min(
+            MAX_EMAIL_CONTENT_CHARS,
+            remaining_chars
+        )
+
+        content = document[:content_limit]
+
+        total_content_chars += len(content)
+
         emails.append({
             "message_id": metadata.get(
                 "source_id",
@@ -118,7 +146,7 @@ def retrieve_relevant_emails(
                 "thread_id",
                 ""
             ),
-            "content": document,
+            "content": content,
             "subject": metadata.get(
                 "subject",
                 ""
@@ -138,5 +166,10 @@ def retrieve_relevant_emails(
             "distance": distance
         })
 
-    return emails
+    print(
+        f"🧠 RAG USED → "
+        f"{len(emails)} emails, "
+        f"{total_content_chars} content chars"
+    )
 
+    return emails

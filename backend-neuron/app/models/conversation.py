@@ -1,3 +1,4 @@
+
 from sqlalchemy import Column, Integer, ForeignKey, DateTime, String
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
@@ -10,10 +11,26 @@ class Conversation(Base):
 
     id = Column(Integer, primary_key=True, index=True)
 
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False
+    )
+
     title = Column(String, nullable=True)
 
-    created_at = Column(DateTime,default=lambda: datetime.now(timezone.utc))
+    created_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc)
+    )
 
-    user = relationship("User", backref="conversations")
+    user = relationship(
+        "User",
+        back_populates="conversations"
+    )
+
+    messages = relationship(
+        "Message",
+        back_populates="conversation",
+        cascade="all, delete-orphan"
+    )

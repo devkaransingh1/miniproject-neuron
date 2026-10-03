@@ -21,8 +21,8 @@ SYNC_INTERVAL_MINUTES = 30
 # RAG CONTEXT LIMITS
 # -----------------------------------------
 
-MAX_TOTAL_CONTEXT_CHARS = 6000
-MAX_EMAIL_CONTENT_CHARS = 1500
+MAX_TOTAL_CONTEXT_CHARS = 2500
+MAX_EMAIL_CONTENT_CHARS = 500
 
 
 def create_email_knowledge_tool(user_id: int):
@@ -137,7 +137,7 @@ def create_email_knowledge_tool(user_id: int):
             results = retrieve_relevant_emails(
                 user_id=user_id,
                 query=query,
-                top_k=5
+                top_k=3
             )
 
             # -----------------------------------------

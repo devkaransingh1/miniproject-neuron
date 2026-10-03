@@ -1,5 +1,6 @@
 
 from sqlalchemy import Column, Integer, String, Boolean, Text, DateTime
+from sqlalchemy.orm import relationship
 
 from app.db.base import Base
 
@@ -29,5 +30,14 @@ class User(Base):
     gmail_last_sync_at = Column(
         DateTime,
         nullable=True
+    )
+    
+    gmail_sync_status = Column( String, default="not_started", nullable=False )
+
+    # Conversations
+    conversations = relationship(
+        "Conversation",
+        back_populates="user",
+        cascade="all, delete-orphan"
     )
 
