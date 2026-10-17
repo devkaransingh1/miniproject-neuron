@@ -17,7 +17,7 @@ def create_gmail_tools(user_id: int):
         internship emails, job emails, senders, subjects,
         recent emails, or latest emails.
         """
-        print("🔥 GMAIL TOOL CALLED")
+        print("[GMAIL TOOL CALLED]")
         print("QUERY RECEIVED:", query)
         db = SessionLocal()
 

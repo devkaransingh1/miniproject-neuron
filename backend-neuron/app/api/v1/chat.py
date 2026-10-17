@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from datetime import datetime, timezone
 import json
 
 from app.api.v1.auth import get_current_user
@@ -105,14 +106,16 @@ def chat(
         db.refresh(conversation)
 
     # -----------------------------------------
-    # GET PREVIOUS MESSAGES
+    # GET PREVIOUS MESSAGES (Most recent 6 messages)
     # -----------------------------------------
 
-    previous_messages = db.query(Message).filter(
+    recent_messages = db.query(Message).filter(
         Message.conversation_id == conversation.id
     ).order_by(
-        Message.created_at.asc()
+        Message.created_at.desc()
     ).limit(6).all()
+
+    previous_messages = list(reversed(recent_messages))
 
     # -----------------------------------------
     # BUILD AGENT HISTORY
@@ -139,6 +142,10 @@ def chat(
 
             except (json.JSONDecodeError, TypeError):
                 pass
+
+        # Keep context concise to avoid TPM token limits
+        if isinstance(content, str) and len(content) > 1000:
+            content = content[:1000] + "..."
 
         agent_messages.append({
             "role": (
@@ -281,6 +288,7 @@ def chat(
         )
     )
 
+    conversation.updated_at = datetime.now(timezone.utc)
     db.add(assistant_message)
     db.commit()
 

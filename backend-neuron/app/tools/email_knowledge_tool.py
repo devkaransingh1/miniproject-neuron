@@ -32,8 +32,10 @@ def create_email_knowledge_tool(user_id: int):
         """
         Search the authenticated user's historical email knowledge.
 
-        Use this tool for semantic and historical questions such as:
+        CRITICAL: DO NOT CALL THIS TOOL FOR GREETINGS, 'HI', 'HELLO', OR CASUAL CONVERSATION.
+        Only call this tool when the user EXPLICITLY asks questions about past or historical email topics.
 
+        Use this tool for semantic and historical questions such as:
         - internship history
         - job opportunities
         - recruiter conversations

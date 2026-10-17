@@ -24,6 +24,12 @@ class Conversation(Base):
         default=lambda: datetime.now(timezone.utc)
     )
 
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        nullable=True
+    )
+
     user = relationship(
         "User",
         back_populates="conversations"

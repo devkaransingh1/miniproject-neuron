@@ -1,3 +1,9 @@
+import sys
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 from fastapi import FastAPI
 from app.api.v1.auth import router as auth_router
 from app.api.v1.chat import router as chat_router
@@ -7,10 +13,11 @@ from app.api.v1.conversations import router as conversations_router
 from app.api.v1.gmail_reconnect import router as gmail_reconnect_router
 from app.api.v1.integrations import router as integrations_router
 from app.api.v1.calendar import router as calendar_router
+from app.api.v1.github import router as github_router
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.db.base import Base
-from app.db.session import engine
+from app.db.session import engine, ensure_db_schema
 from app.models import User, Conversation, Message
 
 
@@ -18,6 +25,7 @@ from app.models import User, Conversation, Message
 app = FastAPI()
 
 Base.metadata.create_all(bind=engine)
+ensure_db_schema(engine)
 
 app.include_router(auth_router,prefix='/api/v1/auth')
 
@@ -53,6 +61,11 @@ app.include_router(
 
 app.include_router(
     calendar_router,
+    prefix="/api/v1"
+)
+
+app.include_router(
+    github_router,
     prefix="/api/v1"
 )
 

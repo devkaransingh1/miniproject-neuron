@@ -12,19 +12,18 @@ def create_gmail_search_tool(user_id: int):
 
     @tool
     def gmail_search(
-        query: str = "",
-        max_results: int = 1,
+        query: str,
+        max_results: int = 5,
     ) -> str:
         """
         Search the authenticated user's Gmail inbox in real time.
 
-        Use this tool for current or recent email questions, including:
-        latest email, latest N emails, emails from a sender, emails
-        matching a Gmail search query, and other live inbox lookups.
+        CRITICAL: DO NOT CALL THIS TOOL FOR GREETINGS, 'HI', 'HELLO', OR CASUAL CONVERSATION.
+        Only call this tool when the user EXPLICITLY asks to search, check, or view their emails or inbox.
 
-        query must be a valid Gmail search query. For the latest emails,
-        use an empty query. max_results controls the exact number of
-        emails requested, up to Gmail's supported limit.
+        Args:
+            query: The Gmail search query (e.g. 'placement cell', 'interview', 'from:sender@example.com', 'is:unread', or '' for recent emails).
+            max_results: The number of emails to return (default: 5).
         """
 
         db = SessionLocal()

@@ -102,8 +102,11 @@ def get_date_range(query: str):
 def create_calendar_search_tool(user_id: int): 
     @tool 
     def calendar_search(query: str) -> str: 
-        """Search the user's Google Calendar for specific dates or event text keywords.""" 
-        print(f"📅 CALENDAR SEARCH → user_id={user_id}, query={query}") 
+        """Search the user's Google Calendar for specific dates or event text keywords.
+        CRITICAL: DO NOT CALL THIS TOOL FOR GREETINGS, 'HI', 'HELLO', OR CASUAL CONVERSATION.
+        Only call when the user explicitly asks about their calendar schedule, meetings, or events.
+        """ 
+        print(f"[CALENDAR SEARCH] user_id={user_id}, query={query}") 
         db = SessionLocal() 
         try: 
             user = db.query(User).filter(User.id == user_id).first() 
@@ -140,7 +143,7 @@ def create_calendar_search_tool(user_id: int):
                 ).execute() 
                 
             events = events_result.get("items", []) 
-            print(f"📅 CALENDAR RESULTS → {len(events)} events found") 
+            print(f"[CALENDAR RESULTS] {len(events)} events found") 
             
             results = [] 
             for event in events: 
@@ -159,7 +162,7 @@ def create_calendar_search_tool(user_id: int):
             return json.dumps({"query": query, "count": len(results), "events": results}) 
             
         except Exception as exc: 
-            print(f"❌ CALENDAR SEARCH ERROR → {exc}") 
+            print(f"[CALENDAR SEARCH ERROR] {exc}") 
             return json.dumps({"error": f"Calendar search failed: {str(exc)}"}) 
         finally: 
             db.close() 

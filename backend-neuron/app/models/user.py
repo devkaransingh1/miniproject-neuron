@@ -60,9 +60,25 @@ class User(Base):
 )
     
     calendar_token_expiry = Column(
-    DateTime,
-    nullable=True
-)
-    
-    
+        DateTime,
+        nullable=True
+    )
 
+    # GitHub integration
+    is_github_connected = Column(
+        Boolean,
+        default=False,
+        nullable=False
+    )
+    github_access_token = Column(
+        Text,
+        nullable=True
+    )
+    github_username = Column(
+        String,
+        nullable=True
+    )
+    github_user_id = Column(
+        String,
+        nullable=True
+    )
