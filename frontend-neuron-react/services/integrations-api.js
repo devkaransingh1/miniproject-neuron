@@ -36,3 +36,13 @@ export function startGmailConnect() {
 export function startCalendarConnect() {
   window.location.assign(`${API_BASE_URL}/api/v1/connect/calendar`);
 }
+
+export function startGitHubConnect() {
+  window.location.assign(`${API_BASE_URL}/api/v1/connect/github`);
+}
+
+export function disconnectGitHub() {
+  return apiRequest("/api/v1/connect/github/disconnect", {
+    method: "POST",
+  });
+}

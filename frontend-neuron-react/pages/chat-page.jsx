@@ -23,6 +23,7 @@ import {
   Settings,
   Sparkles,
   Square,
+  Trash2,
   UserRound,
   X,
 } from "lucide-react";
@@ -31,6 +32,7 @@ import { ChatMarkdown } from "@/components/chat/chat-markdown";
 import { useAuth } from "@/components/auth/use-auth";
 import { ApiError } from "@/lib/api-client";
 import {
+  deleteConversation,
   getConversation,
   getConversations,
   sendChatMessage,
@@ -40,12 +42,14 @@ import {
   getIntegrationStatus,
   startCalendarConnect,
   startGmailConnect,
+  startGitHubConnect,
 } from "@/services/integrations-api";
 
 const suggestedPrompts = [
   "Summarize my recent emails",
+  "What did I commit recently on GitHub?",
+  "Search my code for auth middleware",
   "Help me plan my week",
-  "What can you help me with?",
 ];
 
 function initials(name = "Neuron user") {
@@ -122,32 +126,108 @@ function normalizeHistory(history) {
   });
 }
 
-function EmptyState({ onPrompt }) {
+function sortConversationsByActivity(conversations, activityById) {
+  return [...conversations].sort((left, right) => {
+    const leftActivity =
+      activityById?.get?.(String(left.id)) ??
+      (Date.parse(left.updated_at || left.created_at) || 0);
+    const rightActivity =
+      activityById?.get?.(String(right.id)) ??
+      (Date.parse(right.updated_at || right.created_at) || 0);
+    return rightActivity - leftActivity;
+  });
+}
+
+function getAssistantActivityMessages(query = "") {
+  const messages = [
+    "Retrieving relevant context",
+    "Searching your connected knowledge",
+    "Gathering details for your answer",
+    "Putting the useful pieces together",
+  ];
+  const asksAboutEmail = /\b(gmail|e-?mails?|inbox|mail)\b/i.test(query);
+  const asksAboutCalendar =
+    /\b(calendar|schedule|meetings?|events?|appointments?)\b/i.test(query);
+
+  if (asksAboutEmail) {
+    messages.push(
+      "Searching Gmail for matching emails",
+      "Retrieving relevant email details",
+      "Reviewing messages from your inbox",
+    );
+  }
+
+  if (asksAboutCalendar) {
+    messages.push(
+      "Checking your calendar for matching events",
+      "Retrieving details from your schedule",
+      "Reviewing your upcoming meetings",
+    );
+  }
+
+  return messages;
+}
+
+function AssistantActivity({ query }) {
+  const [activity, setActivity] = useState(() => {
+    const messages = getAssistantActivityMessages(query);
+    return messages[Math.floor(Math.random() * messages.length)];
+  });
+
+  useEffect(() => {
+    const messages = getAssistantActivityMessages(query);
+    const interval = window.setInterval(() => {
+      setActivity((current) => {
+        const alternatives = messages.filter((message) => message !== current);
+        return alternatives[Math.floor(Math.random() * alternatives.length)];
+      });
+    }, 1350 + Math.floor(Math.random() * 850));
+
+    return () => window.clearInterval(interval);
+  }, [query]);
+
   return (
-    <div className="chat-empty-state mx-auto flex min-h-full w-full max-w-3xl flex-col items-center justify-center px-5 py-12 text-center">
-      <div className="chat-orbit mb-7 flex size-16 items-center justify-center rounded-[22px] border border-white/10 bg-gradient-to-br from-white/[0.09] to-white/[0.015] shadow-[0_16px_60px_rgba(75,130,255,0.1)]">
-        <Sparkles className="size-6 text-sky-100/85" />
-      </div>
-      <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-sky-100/45">
-        A clearer space to think
-      </p>
-      <h1 className="mt-4 font-display text-4xl tracking-tight text-white sm:text-6xl">
-        What’s on your mind?
-      </h1>
-      <p className="mt-4 max-w-lg text-sm leading-6 text-white/45 sm:text-[15px]">
-        Your ideas, questions, and connected context—together in one place.
-      </p>
-      <div className="mt-9 flex max-w-2xl flex-wrap justify-center gap-2.5">
-        {suggestedPrompts.map((prompt) => (
-          <button
-            key={prompt}
-            type="button"
-            onClick={() => onPrompt(prompt)}
-            className="chat-prompt-chip rounded-full border border-white/[0.09] bg-white/[0.025] px-4 py-2.5 text-xs text-white/60 transition-colors hover:border-sky-200/20 hover:bg-sky-200/[0.055] hover:text-white"
-          >
-            {prompt}
-          </button>
-        ))}
+    <div
+      aria-live="polite"
+      className="chat-assistant-activity flex items-center gap-2 py-2 text-sm font-medium text-sky-300"
+    >
+      <LoaderCircle className="size-4 animate-spin text-sky-300" />
+      <span>{activity}</span>
+      <span className="animate-pulse">…</span>
+    </div>
+  );
+}
+
+function EmptyState({ onPrompt, composer }) {
+  return (
+    <div className="chat-empty-state mx-auto flex min-h-full w-full max-w-3xl flex-col items-center justify-center px-5 py-10 text-center sm:px-8 sm:py-12">
+      <div className="chat-empty-content flex w-full flex-col items-center">
+        <div className="chat-orbit mb-6 flex size-14 items-center justify-center rounded-[20px] border border-white/10 bg-gradient-to-br from-white/[0.09] to-white/[0.015] shadow-[0_16px_60px_rgba(75,130,255,0.1)] sm:mb-7 sm:size-16">
+          <Sparkles className="size-6 text-sky-100/85" />
+        </div>
+        <p className="chat-welcome-eyebrow font-mono text-[10px] uppercase tracking-[0.22em] text-sky-100/45">
+          A little room to think
+        </p>
+        <h1 className="chat-welcome-title mt-3 text-4xl font-medium tracking-tight text-white sm:mt-4 sm:text-6xl">
+          How can I help today?
+        </h1>
+        <p className="chat-welcome-description mt-3 max-w-lg text-sm leading-6 text-white/45 sm:mt-4 sm:text-[15px]">
+          Ask a question, explore an idea, or put your connected context to
+          work.
+        </p>
+        <div className="chat-empty-composer mt-7 w-full sm:mt-9">{composer}</div>
+        <div className="chat-empty-prompts mt-5 flex max-w-2xl flex-wrap justify-center gap-2.5 sm:mt-7">
+          {suggestedPrompts.map((prompt) => (
+            <button
+              key={prompt}
+              type="button"
+              onClick={() => onPrompt(prompt)}
+              className="chat-prompt-chip rounded-full border border-white/[0.09] bg-white/[0.025] px-4 py-2.5 text-xs text-white/60 transition-colors hover:border-sky-200/20 hover:bg-sky-200/[0.055] hover:text-white"
+            >
+              {prompt}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -233,7 +313,7 @@ function ChatMessage({ message }) {
         data-message-id={message.id}
         className="chat-message-enter flex min-w-0 justify-end py-3"
       >
-        <div className="max-w-[min(88%,44rem)] rounded-[20px] rounded-br-md border border-sky-200/[0.12] bg-gradient-to-br from-[#213d68] to-[#172844] px-4 py-3 text-sm leading-6 text-white shadow-[0_8px_30px_rgba(0,0,0,0.16)] sm:px-5">
+        <div className="max-w-[min(88%,44rem)] rounded-[20px] rounded-br-md border border-sky-300/25 bg-gradient-to-br from-[#1688ff] to-[#0866d6] px-4 py-3 text-sm leading-6 text-white shadow-[0_8px_30px_rgba(0,0,0,0.22)] sm:px-5">
           <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
             {message.content}
           </p>
@@ -258,11 +338,7 @@ function ChatMessage({ message }) {
           Neuron
         </p>
         {message.isLoading ? (
-          <div className="flex items-center gap-2 py-2 text-sm text-white/45">
-            <LoaderCircle className="size-4 animate-spin" />
-            Thinking
-            <span className="animate-pulse">…</span>
-          </div>
+          <AssistantActivity query={message.query} />
         ) : (
           <>
             <ChatMarkdown content={message.content} />
@@ -283,30 +359,61 @@ function ChatMessage({ message }) {
   );
 }
 
-function ConversationRow({ conversation, selected, onSelect, collapsed }) {
+function ConversationRow({
+  conversation,
+  selected,
+  onSelect,
+  onDelete,
+  collapsed,
+  isDeleting,
+}) {
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      title={conversation.title || "New conversation"}
-      className={`group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2.5 text-left transition-colors ${
+    <div
+      className={`group relative flex w-full items-center rounded-lg transition-colors ${
         selected
-          ? "bg-white/[0.075] text-white"
+          ? "bg-white/[0.08] text-white"
           : "text-white/55 hover:bg-white/[0.045] hover:text-white/85"
       }`}
     >
-      <MessageSquare className="size-3.5 shrink-0 text-white/35" />
-      {!collapsed && (
-        <>
+      <button
+        type="button"
+        onClick={onSelect}
+        title={conversation.title || "New conversation"}
+        className="flex min-w-0 flex-1 items-center gap-2.5 px-2.5 py-2.5 text-left"
+      >
+        <MessageSquare className="size-3.5 shrink-0 text-white/35" />
+        {!collapsed && (
           <span className="min-w-0 flex-1 truncate text-xs">
             {conversation.title || "New conversation"}
           </span>
-          <time className="hidden shrink-0 text-[10px] text-white/30 group-hover:inline">
-            {formatDate(conversation.created_at)}
+        )}
+      </button>
+
+      {!collapsed && (
+        <div className="flex shrink-0 items-center pr-2">
+          <time className="text-[10px] text-white/30 group-hover:hidden">
+            {formatDate(conversation.updated_at || conversation.created_at)}
           </time>
-        </>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(conversation.id);
+            }}
+            disabled={isDeleting}
+            title="Delete conversation"
+            aria-label="Delete conversation"
+            className="hidden rounded p-1 text-white/35 transition-colors hover:bg-red-500/20 hover:text-red-300 group-hover:inline-flex"
+          >
+            {isDeleting ? (
+              <LoaderCircle className="size-3.5 animate-spin text-red-300" />
+            ) : (
+              <Trash2 className="size-3.5" />
+            )}
+          </button>
+        </div>
       )}
-    </button>
+    </div>
   );
 }
 
@@ -431,7 +538,13 @@ function IntegrationsPanel({
             connected === false &&
             !isLoading &&
             !hasError;
-          const canConnect = canConnectGmail || canConnectCalendar;
+          const canConnectGitHub =
+            key === "github" &&
+            connected === false &&
+            !isLoading &&
+            !hasError;
+          const canConnect =
+            canConnectGmail || canConnectCalendar || canConnectGitHub;
           const hoverText =
             key === "gmail"
               ? connected === true
@@ -445,7 +558,13 @@ function IntegrationsPanel({
                   : canConnectCalendar
                     ? "Connect Google Calendar"
                     : label
-                : `${name} sync coming soon`;
+                : key === "github"
+                  ? connected === true
+                    ? "GitHub connected"
+                    : canConnectGitHub
+                      ? "Connect GitHub"
+                      : label
+                  : `${name} sync coming soon`;
 
           return (
             <button
@@ -457,7 +576,9 @@ function IntegrationsPanel({
                   ? startGmailConnect
                   : canConnectCalendar
                     ? startCalendarConnect
-                    : undefined
+                    : canConnectGitHub
+                      ? startGitHubConnect
+                      : undefined
               }
               title={hoverText}
               aria-label={`${name}: ${label}. ${hoverText}`}
@@ -577,6 +698,7 @@ export function ChatPage() {
   const navigate = useNavigate();
   const [conversations, setConversations] = useState([]);
   const [conversationId, setConversationId] = useState(null);
+  const [deletingConversationId, setDeletingConversationId] = useState(null);
   const [conversationTitle, setConversationTitle] = useState("New chat");
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState("");
@@ -606,6 +728,7 @@ export function ChatPage() {
   const scrollingToBottomRef = useRef(false);
   const sendControllerRef = useRef(null);
   const historyControllerRef = useRef(null);
+  const conversationActivityRef = useRef(new Map());
   const gmailSyncWasActiveRef = useRef(false);
   const gmailSyncNoticeTimerRef = useRef(null);
 
@@ -613,7 +736,13 @@ export function ChatPage() {
     try {
       const result = await getConversations(signal);
       if (signal?.aborted) return;
-      setConversations(Array.isArray(result) ? result : []);
+      const loadedConversations = Array.isArray(result) ? result : [];
+      setConversations(
+        sortConversationsByActivity(
+          loadedConversations,
+          conversationActivityRef.current,
+        ),
+      );
       setSidebarError("");
     } catch (error) {
       if (signal?.aborted) return;
@@ -728,7 +857,13 @@ export function ChatPage() {
       getConversations(controller.signal)
         .then((result) => {
           if (!active) return;
-          setConversations(Array.isArray(result) ? result : []);
+          const loadedConversations = Array.isArray(result) ? result : [];
+          setConversations(
+            sortConversationsByActivity(
+              loadedConversations,
+              conversationActivityRef.current,
+            ),
+          );
           setSidebarError("");
         })
         .catch((error) => {
@@ -904,6 +1039,25 @@ export function ChatPage() {
     }
   };
 
+  const handleDeleteConversation = async (idToDelete) => {
+    setDeletingConversationId(idToDelete);
+    try {
+      await deleteConversation(idToDelete);
+      setConversations((current) =>
+        current.filter((item) => item.id !== idToDelete),
+      );
+      conversationActivityRef.current.delete(String(idToDelete));
+
+      if (conversationId === idToDelete) {
+        beginNewChat();
+      }
+    } catch (error) {
+      setSidebarError("Could not delete conversation. Please try again.");
+    } finally {
+      setDeletingConversationId(null);
+    }
+  };
+
   const sendMessage = async (eventOrText) => {
     eventOrText?.preventDefault?.();
     const text = (typeof eventOrText === "string" ? eventOrText : draft).trim();
@@ -923,12 +1077,21 @@ export function ChatPage() {
     setDraft("");
     setSendError("");
     setConversationError("");
+
+    if (conversationId) {
+      conversationActivityRef.current.set(String(conversationId), Date.now());
+      setConversations((current) =>
+        sortConversationsByActivity(current, conversationActivityRef.current),
+      );
+    }
+
     setMessages((current) => [
       ...current,
       userMessage,
       {
         id: assistantId,
         role: "assistant",
+        query: text,
         content: "",
         isLoading: true,
         reservedHeight: messageListRef.current?.clientHeight ?? 0,
@@ -950,6 +1113,13 @@ export function ChatPage() {
       if (controller.signal.aborted) return;
 
       setConversationId(result.conversation_id);
+      conversationActivityRef.current.set(
+        String(result.conversation_id),
+        Date.now(),
+      );
+      setConversations((current) =>
+        sortConversationsByActivity(current, conversationActivityRef.current),
+      );
       const responseContent = result.response?.content || "";
       setMessages((current) =>
         current.map((message) =>
@@ -1056,6 +1226,96 @@ export function ChatPage() {
   const showGmailIndexingNotice =
     gmailSyncStatus === "syncing" &&
     /\b(gmail|emails?|inbox|mail)\b/i.test(lastUserMessage?.content || "");
+  const isEmptyChat =
+    messages.length === 0 && !isLoadingHistory && !conversationError;
+  const chatComposer = (
+    <form onSubmit={sendMessage} className="mx-auto w-full max-w-3xl">
+      {showGmailIndexingNotice && (
+        <p
+          role="status"
+          className="mb-3 rounded-lg border border-blue-400/15 bg-blue-400/[0.05] px-3 py-2 text-xs text-blue-100/75"
+        >
+          Gmail context may not be fully indexed yet.
+        </p>
+      )}
+      {sendError && (
+        <div
+          role="alert"
+          className="mb-3 flex items-center justify-between rounded-lg border border-red-300/15 bg-red-300/[0.04] px-3 py-2 text-xs text-red-200/80"
+        >
+          <span>{sendError}</span>
+          <button
+            type="button"
+            onClick={() => setSendError("")}
+            aria-label="Dismiss error"
+            className="ml-3 text-red-200/60 hover:text-red-100"
+          >
+            <X className="size-3.5" />
+          </button>
+        </div>
+      )}
+      <div className="chat-composer rounded-[24px] border border-white/[0.1] bg-gradient-to-br from-[#17191f]/95 to-[#101115]/95 p-2.5 shadow-[0_18px_60px_rgba(0,0,0,0.38)] backdrop-blur-2xl transition-colors focus-within:border-sky-100/25 sm:p-3">
+        <textarea
+          ref={composerRef}
+          value={draft}
+          onChange={handleComposerChange}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              event.currentTarget.form?.requestSubmit();
+            }
+          }}
+          rows={1}
+          placeholder="Message Neuron…"
+          aria-label="Message Neuron"
+          className="max-h-48 min-h-14 w-full resize-none break-words bg-transparent px-3 py-3 text-sm leading-6 text-white outline-none placeholder:text-white/30 [overflow-wrap:anywhere] sm:px-4"
+        />
+        <div className="flex items-center justify-between px-1 pb-1">
+          <div className="flex items-center gap-1.5 pl-1 text-[10px] text-white/30">
+            <span className="hidden sm:inline">
+              Your connected context is private
+            </span>
+            <span className="sm:hidden">Private context</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {!draft.trim() && !isSending && (
+              <button
+                type="button"
+                disabled
+                title="Voice input coming soon"
+                aria-label="Voice input coming soon"
+                className="rounded-lg p-2 text-white/25"
+              >
+                <Mic className="size-4" />
+              </button>
+            )}
+            {isSending ? (
+              <button
+                type="button"
+                onClick={stopGeneration}
+                className="chat-send-button flex size-10 items-center justify-center rounded-xl bg-white text-black transition-colors hover:bg-white/85"
+                aria-label="Stop response"
+              >
+                <Square className="size-3.5 fill-current" />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={!draft.trim()}
+                className="chat-send-button flex size-10 items-center justify-center rounded-xl bg-white text-black transition-all hover:bg-white/85 disabled:cursor-not-allowed disabled:bg-white/[0.08] disabled:text-white/25"
+                aria-label="Send message"
+              >
+                <Send className="size-4" />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+      <p className="chat-composer-disclaimer mt-2 text-center text-[10px] text-white/25">
+        Neuron can make mistakes. Verify important information.
+      </p>
+    </form>
+  );
 
   return (
     <main className="chat-workspace flex h-[100dvh] min-w-0 overflow-hidden bg-[#080808] text-white">
@@ -1195,6 +1455,8 @@ export function ChatPage() {
                   selected={conversationId === conversation.id}
                   collapsed={isSidebarCollapsed}
                   onSelect={() => openConversation(conversation)}
+                  onDelete={handleDeleteConversation}
+                  isDeleting={deletingConversationId === conversation.id}
                 />
               ))
             ) : (
@@ -1419,7 +1681,10 @@ export function ChatPage() {
                 </button>
               </div>
             ) : (
-              <EmptyState onPrompt={(prompt) => sendMessage(prompt)} />
+              <EmptyState
+                onPrompt={(prompt) => sendMessage(prompt)}
+                composer={chatComposer}
+              />
             )}
           </div>
           {showScrollToBottom && messages.length > 0 && (
@@ -1444,94 +1709,11 @@ export function ChatPage() {
           )}
         </div>
 
-        <div className="shrink-0 px-4 pb-3 pt-3 sm:px-6 sm:pb-5">
-          <form onSubmit={sendMessage} className="mx-auto w-full max-w-3xl">
-            {showGmailIndexingNotice && (
-              <p
-                role="status"
-                className="mb-3 rounded-lg border border-blue-400/15 bg-blue-400/[0.05] px-3 py-2 text-xs text-blue-100/75"
-              >
-                Gmail context may not be fully indexed yet.
-              </p>
-            )}
-            {sendError && (
-              <div
-                role="alert"
-                className="mb-3 flex items-center justify-between rounded-lg border border-red-300/15 bg-red-300/[0.04] px-3 py-2 text-xs text-red-200/80"
-              >
-                <span>{sendError}</span>
-                <button
-                  type="button"
-                  onClick={() => setSendError("")}
-                  aria-label="Dismiss error"
-                  className="ml-3 text-red-200/60 hover:text-red-100"
-                >
-                  <X className="size-3.5" />
-                </button>
-              </div>
-            )}
-            <div className="chat-composer rounded-[22px] border border-white/[0.1] bg-[#111318]/95 p-2 shadow-[0_14px_50px_rgba(0,0,0,0.32)] transition-colors focus-within:border-sky-100/20">
-              <textarea
-                ref={composerRef}
-                value={draft}
-                onChange={handleComposerChange}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault();
-                    event.currentTarget.form?.requestSubmit();
-                  }
-                }}
-                rows={1}
-                placeholder="Message Neuron…"
-                aria-label="Message Neuron"
-                className="max-h-48 min-h-12 w-full resize-none break-words bg-transparent px-3 py-3 text-sm leading-6 text-white outline-none placeholder:text-white/30 [overflow-wrap:anywhere]"
-              />
-              <div className="flex items-center justify-between px-1 pb-1">
-                <div className="flex items-center gap-1.5 pl-1 text-[10px] text-white/30">
-                  <span className="hidden sm:inline">
-                    Your connected context is private
-                  </span>
-                  <span className="sm:hidden">Private context</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {!draft.trim() && !isSending && (
-                    <button
-                      type="button"
-                      disabled
-                      title="Voice input coming soon"
-                      aria-label="Voice input coming soon"
-                      className="rounded-lg p-2 text-white/25"
-                    >
-                      <Mic className="size-4" />
-                    </button>
-                  )}
-                  {isSending ? (
-                    <button
-                      type="button"
-                      onClick={stopGeneration}
-                      className="flex size-9 items-center justify-center rounded-xl bg-white text-black transition-colors hover:bg-white/85"
-                      aria-label="Stop response"
-                    >
-                      <Square className="size-3.5 fill-current" />
-                    </button>
-                  ) : (
-                    <button
-                      type="submit"
-                      disabled={!draft.trim()}
-                      className="flex size-9 items-center justify-center rounded-xl bg-white text-black transition-all hover:bg-white/85 disabled:cursor-not-allowed disabled:bg-white/[0.08] disabled:text-white/25"
-                      aria-label="Send message"
-                    >
-                      <Send className="size-4" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-            <p className="mt-2 text-center text-[10px] text-white/25">
-              Neuron can make mistakes. Verify important information.
-            </p>
-          </form>
-        </div>
+        {!isEmptyChat && (
+          <div className="chat-composer-dock shrink-0 px-4 pb-3 pt-3 sm:px-6 sm:pb-5">
+            {chatComposer}
+          </div>
+        )}
       </section>
     </main>
   );

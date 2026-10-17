@@ -46,3 +46,18 @@ export function getConversation(conversationId, signal) {
     { signal, cache: "no-store" },
   );
 }
+
+/**
+ * @param {number} conversationId
+ * @param {AbortSignal} [signal]
+ * @returns {Promise<{ status: string, message: string }>}
+ */
+export function deleteConversation(conversationId, signal) {
+  return apiRequest(
+    `/api/v1/conversations/${encodeURIComponent(conversationId)}`,
+    {
+      method: "DELETE",
+      signal,
+    },
+  );
+}
