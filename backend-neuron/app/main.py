@@ -17,15 +17,16 @@ from app.api.v1.github import router as github_router
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.db.base import Base
-from app.db.session import engine, ensure_db_schema
+from app.db.session import engine
 from app.models import User, Conversation, Message
+from app.models.neuron_vector import NeuronVector
 
 
 
 app = FastAPI()
 
 Base.metadata.create_all(bind=engine)
-ensure_db_schema(engine)
+
 
 app.include_router(auth_router,prefix='/api/v1/auth')
 
