@@ -19,6 +19,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from app.db.base import Base
 from app.db.session import engine
 from app.models import User, Conversation, Message
+from fastapi.middleware.cors import CORSMiddleware
 from app.models.neuron_vector import NeuronVector
 
 
@@ -68,5 +69,14 @@ app.include_router(
 app.include_router(
     github_router,
     prefix="/api/v1"
+)
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://neuron-71tk.onrender.com"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
