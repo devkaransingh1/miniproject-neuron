@@ -5,6 +5,7 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 from fastapi import FastAPI
+import os
 from app.api.v1.auth import router as auth_router
 from app.api.v1.chat import router as chat_router
 from app.api.v1.gmail import router as gmail_router
@@ -33,10 +34,10 @@ app.include_router(auth_router,prefix='/api/v1/auth')
 
 app.add_middleware(
     SessionMiddleware,
-    secret_key="mysecretkey",
+    secret_key=os.environ["SESSION_SECRET"],
     max_age=60 * 60 * 24 * 7,
-    same_site="lax",
-    https_only=False,
+    same_site="none",
+    https_only=True,
 )
 
 app.include_router(gmail_router, prefix="/api/v1")
